@@ -314,43 +314,60 @@ def monmap_move_output(monmap, output, rel_output, relation):
     out_idx = monmap_find_output_idx(monmap, output)
     rel_idx = monmap_find_output_idx(monmap, rel_output)
 
-    assert(out_idx and rel_idx)
-
-    if relation == 'left-of':
-        new_idx = (rel_idx[0], rel_idx[1] - 1)
-        shift_direction = '>'
-    elif relation == 'right-of':
-        new_idx = (rel_idx[0], rel_idx[1] + 1)
-        shift_direction = '>'
-    elif relation == 'above':
-        new_idx = (rel_idx[0] - 1, rel_idx[1])
-        shift_direction = 'v'
-    elif relation == 'below':
-        new_idx = (rel_idx[0] + 1, rel_idx[1])
-        shift_direction = 'v'
-    elif relation == 'same-as':
-        new_idx = rel_idx
-    else:
-        assert(0)
-
-    if new_idx[0] < 0:
-        new_idx = (0, new_idx[1])
-
-    if new_idx[1] < 0:
-        new_idx = (new_idx[0], 0)
-
-    if new_idx == out_idx:
+    if not out_idx or not rel_idx:
+        warn(f"Can't position {output} relative to {rel_output} because one of them is not active.")
         return
 
-    # remove the output first, so it is not considered while shifting
-    monmap[out_idx[0]][out_idx[1]].remove(output)
+    rel_row, rel_col = rel_idx
+    if relation == 'left-of':
+        new_row, new_col = rel_row, rel_col - 1
+    elif relation == 'right-of':
+        new_row, new_col = rel_row, rel_col + 1
+    elif relation == 'above':
+        new_row, new_col = rel_row - 1, rel_col
+    elif relation == 'below':
+        new_row, new_col = rel_row + 1, rel_col
+    elif relation == 'same-as':
+        new_row, new_col = rel_row, rel_col
+    else:
+        warn(f"Unknown relation: {relation}")
+        return
 
-    if relation != 'same-as' and not monmap_idx_free(monmap, new_idx):
-        monmap_shift(monmap, new_idx, shift_direction)
+    # Expand monmap grid if needed
+    while new_row < 0:
+        monmap.insert(0, [[] for _ in range(len(monmap[0]))])
+        new_row += 1
+        out_idx = (out_idx[0] + 1, out_idx[1])
+        rel_idx = (rel_idx[0] + 1, rel_idx[1])
 
-    monmap[new_idx[0]][new_idx[1]].append(output)
-    monmap_compact(monmap, out_idx)
+    while len(monmap) <= new_row:
+        monmap.append([[] for _ in range(len(monmap[0]))])
 
+    while new_col < 0:
+        for row in monmap:
+            row.insert(0, [])
+        new_col += 1
+        out_idx = (out_idx[0], out_idx[1] + 1)
+        rel_idx = (rel_idx[0], rel_idx[1] + 1)
+
+    while len(monmap[0]) <= new_col:
+        for row in monmap:
+            row.append([])
+
+    # Remove the output from its current location
+    if output in monmap[out_idx[0]][out_idx[1]]:
+        monmap[out_idx[0]][out_idx[1]].remove(output)
+
+    # Move to new location
+    monmap[new_row][new_col].append(output)
+
+    # Optional: cleanup/compact (not recursive to avoid index errors)
+    # Optional: cleanup/compact (not recursive to avoid index errors)
+    if out_idx != (new_row, new_col):
+        try:
+            monmap_compact(monmap, out_idx)
+        except IndexError:
+            pass
 
 def monmap_to_lm(config_info, monmap):
     new_lm = []
